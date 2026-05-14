@@ -8,12 +8,6 @@ services:
       - POSTGRES_PASSWORD=${AUTH_POSTGRES_PASSWORD}
     volumes:
       - auth_data:/var/lib/postgresql/data
-    healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${AUTH_POSTGRES_USER} -d ${AUTH_POSTGRES_DB}" ]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-      start_period: 20s
 
   auth-api:
     image: ghcr.io/biofin-eu/auth-api:latest
@@ -36,14 +30,7 @@ services:
     ports:
       - "8010:8010"
     depends_on:
-      auth-db:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8010/docs', timeout=3)\""]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 30s
+      - auth-db
 
   physical-db:
     image: postgres:16.3
@@ -54,12 +41,6 @@ services:
       - POSTGRES_PASSWORD=${PHYSICAL_POSTGRES_PASSWORD}
     volumes:
       - physical_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${PHYSICAL_POSTGRES_USER} -d ${PHYSICAL_POSTGRES_DB}"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-      start_period: 20s
 
   temporal-postgres:
     image: postgres:16.3
@@ -70,12 +51,6 @@ services:
       - POSTGRES_PASSWORD=${TEMPORAL_POSTGRES_PASSWORD}
     volumes:
       - temporal_pg_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${TEMPORAL_POSTGRES_USER} -d temporal"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-      start_period: 20s
 
   temporal:
     image: temporalio/auto-setup:latest
@@ -90,14 +65,7 @@ services:
       - POSTGRES_SEEDS=temporal-postgres
       - TEMPORAL_LOG_LEVEL=warn
     depends_on:
-      temporal-postgres:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "temporal operator cluster health --address localhost:7233"]
-      interval: 10s
-      timeout: 5s
-      retries: 20
-      start_period: 40s
+      - temporal-postgres
 
   temporal-ui:
     image: temporalio/ui:latest
@@ -108,8 +76,7 @@ services:
       - TEMPORAL_ADDRESS=temporal:7233
       - TEMPORAL_TASK_QUEUE=case-workflow-task-queue
     depends_on:
-      temporal:
-        condition: service_healthy
+      - temporal
 
   minio:
     image: minio/minio:latest
@@ -126,12 +93,6 @@ services:
       - "9001:9001"
     volumes:
       - minio_data:/data
-    healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:9000/minio/health/ready || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 20s
 
   physical-api:
     image: ghcr.io/biofin-eu/physical-api:latest
@@ -156,20 +117,10 @@ services:
       - MINIO_BUCKET=case-documents
       - MINIO_SECURE=false
     depends_on:
-      physical-db:
-        condition: service_healthy
-      auth-api:
-        condition: service_healthy
-      temporal:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8020/docs', timeout=3)\""]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 30s
+      - physical-db
+      - auth-api
+      - temporal
+      - minio
 
   physical-worker:
     image: ghcr.io/biofin-eu/physical-api:latest
@@ -192,14 +143,10 @@ services:
       - MINIO_BUCKET=case-documents
       - MINIO_SECURE=false
     depends_on:
-      physical-db:
-        condition: service_healthy
-      auth-api:
-        condition: service_healthy
-      temporal:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
+      - physical-db
+      - auth-api
+      - temporal
+      - minio
 
   gateway-api:
     image: ghcr.io/biofin-eu/gateway-api:latest
@@ -224,16 +171,8 @@ services:
       - https_proxy=${HTTPS_PROXY}
       - DEFAULT_NO_PROXY=${DEFAULT_NO_PROXY}
     depends_on:
-      auth-api:
-        condition: service_healthy
-      physical-api:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/docs', timeout=3)\""]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 30s
+      - auth-api
+      - physical-api
 
   frontend-ui:
     image: ghcr.io/biofin-eu/frontend-ui:latest
@@ -253,8 +192,7 @@ services:
       - DEFAULT_NO_PROXY=${DEFAULT_NO_PROXY}
     command: npm run dev -- --hostname 0.0.0.0 --port 3000
     depends_on:
-      gateway-api:
-        condition: service_healthy
+      - gateway-api
 
 volumes:
   physical_data:
