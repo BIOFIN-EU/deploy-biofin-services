@@ -169,6 +169,14 @@ services:
       - AUTH_CLIENT_SECRET=${GATEWAY_AUTH_CLIENT_SECRET}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - JWT_ALGORITHM=HS256
+      - VIRTUAL_HOST=${VIRTUAL_HOST}
+      - LETSENCRYPT_HOST=${LETSENCRYPT_HOST}
+      - VIRTUAL_PORT=${APP_PORT}
+      - HTTP_PROXY=${HTTP_PROXY}
+      - HTTPS_PROXY=${HTTPS_PROXY}
+      - http_proxy=${HTTP_PROXY}
+      - https_proxy=${HTTPS_PROXY}
+      - DEFAULT_NO_PROXY=${DEFAULT_NO_PROXY}
     depends_on:
       - auth-api
       - physical-api
@@ -179,6 +187,14 @@ services:
       - "3000:3000"
     environment:
       - NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}
+      - VIRTUAL_HOST=${VIRTUAL_HOST}
+      - LETSENCRYPT_HOST=${LETSENCRYPT_HOST}
+      - VIRTUAL_PORT=${APP_PORT}
+      - HTTP_PROXY=${HTTP_PROXY}
+      - HTTPS_PROXY=${HTTPS_PROXY}
+      - http_proxy=${HTTP_PROXY}
+      - https_proxy=${HTTPS_PROXY}
+      - DEFAULT_NO_PROXY=${DEFAULT_NO_PROXY}
     command: npm run dev -- --hostname 0.0.0.0 --port 3000
     depends_on:
       - gateway-api
