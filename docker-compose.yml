@@ -1,5 +1,4 @@
 services:
-
   auth-db:
     image: postgres:16.3
     restart: unless-stopped
@@ -10,15 +9,15 @@ services:
     volumes:
       - auth_data:/var/lib/postgresql/data
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U $AUTH_POSTGRES_USER -d $AUTH_POSTGRES_DB || exit 1" ]
-      interval: 10s
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
       timeout: 5s
-      retries: 3
-      start_period: 10s
-
+      retries: 10
+      start_period: 20s
 
   auth-api:
     image: ghcr.io/biofin-eu/auth-api:latest
+    restart: unless-stopped
     environment:
       - POSTGRES_HOST=auth-db
       - POSTGRES_PORT=5432
@@ -39,9 +38,104 @@ services:
     depends_on:
       auth-db:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8010/docs', timeout=3)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  physical-db:
+    image: postgres:16.3
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=${PHYSICAL_POSTGRES_DB}
+      - POSTGRES_USER=${PHYSICAL_POSTGRES_USER}
+      - POSTGRES_PASSWORD=${PHYSICAL_POSTGRES_PASSWORD}
+    volumes:
+      - physical_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  temporal-postgres:
+    image: postgres:16.3
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=temporal
+      - POSTGRES_USER=${TEMPORAL_POSTGRES_USER}
+      - POSTGRES_PASSWORD=${TEMPORAL_POSTGRES_PASSWORD}
+    volumes:
+      - temporal_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  temporal:
+    image: temporalio/auto-setup:latest
+    restart: unless-stopped
+    ports:
+      - "7233:7233"
+    environment:
+      - DB=postgres12
+      - DB_PORT=5432
+      - POSTGRES_USER=${TEMPORAL_POSTGRES_USER}
+      - POSTGRES_PWD=${TEMPORAL_POSTGRES_PASSWORD}
+      - POSTGRES_SEEDS=temporal-postgres
+      - TEMPORAL_LOG_LEVEL=warn
+    depends_on:
+      temporal-postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "temporal operator cluster health --address localhost:7233"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 40s
+
+  temporal-ui:
+    image: temporalio/ui:latest
+    restart: unless-stopped
+    ports:
+      - "8081:8080"
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_TASK_QUEUE=case-workflow-task-queue
+    depends_on:
+      temporal:
+        condition: service_healthy
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_BUCKET=case-documents
+      - MINIO_SECURE=false
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:9000/minio/health/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
 
   physical-api:
     image: ghcr.io/biofin-eu/physical-api:latest
+    restart: unless-stopped
     command: uvicorn app.main:app --host 0.0.0.0 --port 8020 --reload
     ports:
       - "8020:8020"
@@ -62,25 +156,24 @@ services:
       - MINIO_BUCKET=case-documents
       - MINIO_SECURE=false
     depends_on:
-      - minio
-      - temporal
-      - physical-db
-    restart: unless-stopped
-
-
-  physical-db:
-    image: postgres:16.3
-    restart: unless-stopped
-    environment:
-      - POSTGRES_DB=${PHYSICAL_POSTGRES_DB}
-      - POSTGRES_USER=${PHYSICAL_POSTGRES_USER}
-      - POSTGRES_PASSWORD=${PHYSICAL_POSTGRES_PASSWORD}
-    volumes:
-      - physical_data:/var/lib/postgresql/data
-
+      physical-db:
+        condition: service_healthy
+      auth-api:
+        condition: service_healthy
+      temporal:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8020/docs', timeout=3)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
   physical-worker:
     image: ghcr.io/biofin-eu/physical-api:latest
+    restart: unless-stopped
     command: python -m app.workers.temporal_worker
     environment:
       - POSTGRES_HOST=physical-db
@@ -99,65 +192,18 @@ services:
       - MINIO_BUCKET=case-documents
       - MINIO_SECURE=false
     depends_on:
-      - temporal
-      - physical-db
-    restart: unless-stopped
-
-
-  temporal:
-    image: temporalio/auto-setup:latest
-    ports:
-      - "7233:7233"
-    environment:
-      - DB=postgres12
-      - DB_PORT=5432
-      - POSTGRES_USER=${TEMPORAL_POSTGRES_USER}
-      - POSTGRES_PWD=${TEMPORAL_POSTGRES_PASSWORD}
-      - POSTGRES_SEEDS=temporal-postgres
-      - TEMPORAL_LOG_LEVEL=warn
-    depends_on:
-      - temporal-postgres
-    restart: unless-stopped
-
-  temporal-postgres:
-    image: postgres:16.3
-    environment:
-      - POSTGRES_DB=temporal
-      - POSTGRES_USER=${TEMPORAL_POSTGRES_USER}
-      - POSTGRES_PASSWORD=${TEMPORAL_POSTGRES_PASSWORD}
-    restart: unless-stopped
-    volumes:
-      - temporal_pg_data:/var/lib/postgresql/data
-
-
-  temporal-ui:
-    image: temporalio/ui:latest
-    ports:
-      - "8081:8080"
-    environment:
-      - TEMPORAL_ADDRESS=temporal:7233
-      - TEMPORAL_TASK_QUEUE=case-workflow-task-queue
-    depends_on:
-      - temporal
-
-
-  minio:
-    image: minio/minio:latest
-    command: server /data --console-address ":9001"
-    environment:
-      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
-      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
-      - MINIO_ENDPOINT=minio:9000
-      - MINIO_BUCKET=case-documents
-      - MINIO_SECURE=false
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    volumes:
-      - minio_data:/data
+      physical-db:
+        condition: service_healthy
+      auth-api:
+        condition: service_healthy
+      temporal:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
 
   gateway-api:
     image: ghcr.io/biofin-eu/gateway-api:latest
+    restart: unless-stopped
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     ports:
       - "8000:8000"
@@ -178,11 +224,20 @@ services:
       - https_proxy=${HTTPS_PROXY}
       - DEFAULT_NO_PROXY=${DEFAULT_NO_PROXY}
     depends_on:
-      - auth-api
-      - physical-api
+      auth-api:
+        condition: service_healthy
+      physical-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/docs', timeout=3)\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
   frontend-ui:
     image: ghcr.io/biofin-eu/frontend-ui:latest
+    restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
@@ -198,8 +253,8 @@ services:
       - DEFAULT_NO_PROXY=${DEFAULT_NO_PROXY}
     command: npm run dev -- --hostname 0.0.0.0 --port 3000
     depends_on:
-      - gateway-api
-
+      gateway-api:
+        condition: service_healthy
 
 volumes:
   physical_data:
