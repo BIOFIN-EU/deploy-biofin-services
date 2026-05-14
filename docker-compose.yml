@@ -9,7 +9,7 @@ services:
     volumes:
       - auth_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      test: ["CMD-SHELL", "pg_isready -U ${AUTH_POSTGRES_USER} -d ${AUTH_POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -55,7 +55,7 @@ services:
     volumes:
       - physical_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      test: ["CMD-SHELL", "pg_isready -U ${PHYSICAL_POSTGRES_USER} -d ${PHYSICAL_POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -71,7 +71,7 @@ services:
     volumes:
       - temporal_pg_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      test: ["CMD-SHELL", "pg_isready -U ${TEMPORAL_POSTGRES_USER} -d temporal"]
       interval: 5s
       timeout: 5s
       retries: 10
