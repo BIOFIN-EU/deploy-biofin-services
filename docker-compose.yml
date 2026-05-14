@@ -112,7 +112,7 @@ services:
       - DB=postgres12
       - DB_PORT=5432
       - POSTGRES_USER=${TEMPORAL_POSTGRES_USER}
-      - POSTGRES_PWD=${TEMPORAL_POSTGRES_PWD}
+      - POSTGRES_PWD=${TEMPORAL_POSTGRES_PASSWORD}
       - POSTGRES_SEEDS=temporal-postgres
       - TEMPORAL_LOG_LEVEL=warn
     depends_on:
