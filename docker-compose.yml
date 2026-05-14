@@ -1,0 +1,191 @@
+services:
+
+  auth-db:
+    image: postgres:16.3
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=${AUTH_POSTGRES_DB}
+      - POSTGRES_USER=${AUTH_POSTGRES_USER}
+      - POSTGRES_PASSWORD=${AUTH_POSTGRES_PASSWORD}
+    volumes:
+      - auth_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U $AUTH_POSTGRES_USER -d $AUTH_POSTGRES_DB || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+
+  auth-api:
+    image: ghcr.io/biofin-eu/auth-api:latest
+    environment:
+      - POSTGRES_HOST=auth-db
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=${AUTH_POSTGRES_DB}
+      - POSTGRES_USER=${AUTH_POSTGRES_USER}
+      - POSTGRES_PASSWORD=${AUTH_POSTGRES_PASSWORD}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - JWT_ALGORITHM=HS256
+      - ACCESS_TOKEN_EXPIRE_HOURS=24
+      - AUTH_CLIENT_ID=${AUTH_CLIENT_ID}
+      - AUTH_CLIENT_SECRET=${AUTH_CLIENT_SECRET}
+      - GATEWAY_AUTH_CLIENT_ID=${GATEWAY_AUTH_CLIENT_ID}
+      - GATEWAY_AUTH_CLIENT_SECRET=${GATEWAY_AUTH_CLIENT_SECRET}
+      - PHYSICAL_AUTH_CLIENT_ID=${PHYSICAL_AUTH_CLIENT_ID}
+      - PHYSICAL_AUTH_CLIENT_SECRET=${PHYSICAL_AUTH_CLIENT_SECRET}
+    ports:
+      - "8010:8010"
+    depends_on:
+      auth-db:
+        condition: service_healthy
+
+  physical-api:
+    image: ghcr.io/biofin-eu/physical-api:latest
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8020 --reload
+    ports:
+      - "8020:8020"
+    environment:
+      - POSTGRES_HOST=physical-db
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=${PHYSICAL_POSTGRES_DB}
+      - POSTGRES_USER=${PHYSICAL_POSTGRES_USER}
+      - POSTGRES_PASSWORD=${PHYSICAL_POSTGRES_PASSWORD}
+      - AUTH_URL=http://auth-api:8010
+      - AUTH_CLIENT_ID=${PHYSICAL_AUTH_CLIENT_ID}
+      - AUTH_CLIENT_SECRET=${PHYSICAL_AUTH_CLIENT_SECRET}
+      - WORKFLOW_DB_SCHEMA=workflow
+      - CASE_DATA_DB_SCHEMA=case_data
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_BUCKET=case-documents
+      - MINIO_SECURE=false
+    depends_on:
+      - minio
+      - temporal
+      - physical-db
+    restart: unless-stopped
+
+
+  physical-db:
+    image: postgres:16.3
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=${PHYSICAL_POSTGRES_DB}
+      - POSTGRES_USER=${PHYSICAL_POSTGRES_USER}
+      - POSTGRES_PASSWORD=${PHYSICAL_POSTGRES_PASSWORD}
+    volumes:
+      - physical_data:/var/lib/postgresql/data
+
+
+  physical-worker:
+    image: ghcr.io/biofin-eu/physical-api:latest
+    command: python -m app.workers.temporal_worker
+    environment:
+      - POSTGRES_HOST=physical-db
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=${PHYSICAL_POSTGRES_DB}
+      - POSTGRES_USER=${PHYSICAL_POSTGRES_USER}
+      - POSTGRES_PASSWORD=${PHYSICAL_POSTGRES_PASSWORD}
+      - AUTH_URL=http://auth-api:8010
+      - AUTH_CLIENT_ID=${PHYSICAL_AUTH_CLIENT_ID}
+      - AUTH_CLIENT_SECRET=${PHYSICAL_AUTH_CLIENT_SECRET}
+      - WORKFLOW_DB_SCHEMA=workflow
+      - CASE_DATA_DB_SCHEMA=case_data
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_BUCKET=case-documents
+      - MINIO_SECURE=false
+    depends_on:
+      - temporal
+      - physical-db
+    restart: unless-stopped
+
+
+  temporal:
+    image: temporalio/auto-setup:latest
+    ports:
+      - "7233:7233"
+    environment:
+      - DB=postgres12
+      - DB_PORT=5432
+      - POSTGRES_USER=${TEMPORAL_POSTGRES_USER}
+      - POSTGRES_USER=${TEMPORAL_POSTGRES_USER}
+      - POSTGRES_PWD=${TEMPORAL_POSTGRES_PWD}
+      - POSTGRES_SEEDS=temporal-postgres
+      - TEMPORAL_LOG_LEVEL=warn
+    depends_on:
+      - temporal-postgres
+    restart: unless-stopped
+
+  temporal-postgres:
+    image: postgres:16.3
+    environment:
+      - POSTGRES_DB=temporal
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    restart: unless-stopped
+    volumes:
+      - temporal_pg_data:/var/lib/postgresql/data
+
+
+  temporal-ui:
+    image: temporalio/ui:latest
+    ports:
+      - "8080:8080"
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_TASK_QUEUE=case-workflow-task-queue
+    depends_on:
+      - temporal
+
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_BUCKET=case-documents
+      - MINIO_SECURE=false
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+
+  gateway-api:
+    image: ghcr.io/biofin-eu/gateway-api:latest
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    environment:
+      - AUTH_URL=http://auth-api:8010
+      - PHYSICAL_API_URL=http://physical-api:8020
+      - AUTH_CLIENT_ID=${GATEWAY_AUTH_CLIENT_ID}
+      - AUTH_CLIENT_SECRET=${GATEWAY_AUTH_CLIENT_SECRET}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - JWT_ALGORITHM=HS256
+    depends_on:
+      - auth-api
+      - physical-api
+
+  frontend-ui:
+    image: ghcr.io/biofin-eu/frontend-ui:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}
+    command: npm run dev -- --hostname 0.0.0.0 --port 3000
+    depends_on:
+      - gateway-api
+
+
+volumes:
+  physical_data:
+  temporal_pg_data:
+  minio_data:
+  auth_data:
