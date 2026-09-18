@@ -6,6 +6,8 @@ services:
       - POSTGRES_DB=${AUTH_POSTGRES_DB}
       - POSTGRES_USER=${AUTH_POSTGRES_USER}
       - POSTGRES_PASSWORD=${AUTH_POSTGRES_PASSWORD}
+      - NO_PROXY=${DEFAULT_NO_PROXY}
+      - no_proxy=${DEFAULT_NO_PROXY}
     volumes:
       - auth_data:/var/lib/postgresql/data
     healthcheck:
@@ -33,6 +35,8 @@ services:
       - GATEWAY_AUTH_CLIENT_SECRET=${GATEWAY_AUTH_CLIENT_SECRET}
       - PHYSICAL_AUTH_CLIENT_ID=${PHYSICAL_AUTH_CLIENT_ID}
       - PHYSICAL_AUTH_CLIENT_SECRET=${PHYSICAL_AUTH_CLIENT_SECRET}
+      - NO_PROXY=${DEFAULT_NO_PROXY}
+      - no_proxy=${DEFAULT_NO_PROXY}
     ports:
       - "8010:8010"
     depends_on:
