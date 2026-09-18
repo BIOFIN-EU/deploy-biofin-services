@@ -183,6 +183,54 @@ services:
       minio:
         condition: service_healthy
 
+  risk-db:
+    image: postgres:16.3
+    environment:
+      POSTGRES_DB: ${RISK_POSTGRES_DB}
+      POSTGRES_USER: ${RISK_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${RISK_POSTGRES_PASSWORD}
+    volumes:
+      - risk_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  risk-framework:
+    image: ghcr.io/biofin-eu/risk-score-framework:latest
+    restart: unless-stopped
+    command: /service/run_server.sh
+    environment:
+      EE_PROJECT: ${RISK_EE_PROJECT}
+      EE_SERVICE_ACCOUNT: ${RISK_EE_SERVICE_ACCOUNT}
+      EE_KEY_FILE: /service/ee_secrets/ee-key.json
+      LOG_LEVEL: ${LOG_LEVEL}
+      DATABASE_HOST: risk-db
+      DATABASE_PORT: 5432
+      DATABASE_NAME: ${RISK_POSTGRES_DB}
+      DATABASE_USER: ${RISK_POSTGRES_USER}
+      DATABASE_PASS: ${RISK_POSTGRES_PASSWORD}
+      WEB_PORT: ${RISK_WEB_PORT}
+    depends_on:
+      risk-db:
+        condition: service_healthy
+    volumes:
+      - ./risk_data/ee_secrets/ee-key.json:/service/ee_secrets/ee-key.json
+      - ./risk_data/data/cached_eu_polygons.json:/service/data/cached_eu_polygons.json
+      - ./risk_data/data/HFP2009_rep.tif:/service/data/HFP2009_rep.tif
+      - ./risk_data/data/Basic_Critical_Habitat_2025_rep.tif:/service/data/Basic_Critical_Habitat_2025_rep.tif
+      - ./risk_data/data/wc2.1_30s_bioc_EC-Earth3-Veg_ssp245_2021-2040.tif:/service/data/wc2.1_30s_bioc_EC-Earth3-Veg_ssp245_2021-2040.tif
+      - ./risk_data/data/wc2.1_30s_bioc_EC-Earth3-Veg_ssp245_2041-2060.tif:/service/data/wc2.1_30s_bioc_EC-Earth3-Veg_ssp245_2041-2060.tif
+      - ./risk_data/data/wc2.1_30s_bioc_EC-Earth3-Veg_ssp585_2021-2040.tif:/service/data/wc2.1_30s_bioc_EC-Earth3-Veg_ssp585_2021-2040.tif
+      - ./risk_data/data/wc2.1_30s_bioc_EC-Earth3-Veg_ssp585_2041-2060.tif:/service/data/wc2.1_30s_bioc_EC-Earth3-Veg_ssp585_2041-2060.tif
+      - ./risk_data/data/WDPA_Mar2026_Public_shp:/service/data/WDPA_Mar2026_Public_shp
+      - ./risk_data/data/countries:/service/data/countries
+    # ports:
+    #   - "${RISK_WEB_PORT}:${RISK_WEB_PORT}"
+
+
   gateway-api:
     image: ghcr.io/biofin-eu/gateway-api:latest
     restart: unless-stopped
@@ -192,6 +240,7 @@ services:
     environment:
       - AUTH_URL=http://auth-api:8010
       - PHYSICAL_API_URL=http://physical-api:8020
+      - RISK_API_URL=http://risk-framework:${RISK_WEB_PORT}
       - AUTH_CLIENT_ID=${GATEWAY_AUTH_CLIENT_ID}
       - AUTH_CLIENT_SECRET=${GATEWAY_AUTH_CLIENT_SECRET}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
@@ -211,9 +260,11 @@ services:
         condition: service_started
       physical-api:
         condition: service_started
+      risk-framework:
+        condition: service_started
 
   frontend-ui:
-    image: ghcr.io/biofin-eu/frontend-ui:latest
+    image: ghcr.io/biofin-eu/frontend-ui:v1.0.0
     restart: unless-stopped
     ports:
       - "3000:3000"
@@ -235,6 +286,7 @@ services:
         condition: service_started
 
 volumes:
+  risk_data:
   physical_data:
   temporal_pg_data:
   minio_data:
