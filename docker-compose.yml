@@ -274,7 +274,7 @@ services:
         condition: service_started
 
   frontend-ui:
-    image: ghcr.io/biofin-eu/frontend-ui:v1.0.0
+    image: ghcr.io/biofin-eu/frontend-ui:latest
     restart: unless-stopped
     ports:
       - "3000:3000"
