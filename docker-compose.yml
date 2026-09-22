@@ -217,6 +217,10 @@ services:
       DATABASE_USER: ${RISK_POSTGRES_USER}
       DATABASE_PASS: ${RISK_POSTGRES_PASSWORD}
       WEB_PORT: ${RISK_WEB_PORT}
+      HTTP_PROXY: ${HTTP_PROXY}
+      HTTPS_PROXY: ${HTTPS_PROXY}
+      http_proxy: ${HTTP_PROXY}
+      https_proxy: ${HTTPS_PROXY}
       NO_PROXY: ${DEFAULT_NO_PROXY}
       no_proxy: ${DEFAULT_NO_PROXY}
     depends_on:
