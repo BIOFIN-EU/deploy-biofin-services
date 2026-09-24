@@ -147,6 +147,7 @@ services:
       - MINIO_ENDPOINT=minio:9000
       - MINIO_BUCKET=case-documents
       - MINIO_SECURE=false
+      - RISK_URL=http://risk-framework:${RISK_WEB_PORT}/api/v1/
     depends_on:
       physical-db:
         condition: service_healthy
@@ -177,6 +178,7 @@ services:
       - MINIO_ENDPOINT=minio:9000
       - MINIO_BUCKET=case-documents
       - MINIO_SECURE=false
+      - RISK_URL=http://risk-framework:${RISK_WEB_PORT}/api/v1/
     depends_on:
       physical-db:
         condition: service_healthy
