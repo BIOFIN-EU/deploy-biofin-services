@@ -209,6 +209,7 @@ services:
     restart: unless-stopped
     command: /service/run_server.sh
     environment:
+      LIMIT_COUNTRY_CODE: ${LIMIT_COUNTRY_CODE}
       EE_PROJECT: ${RISK_EE_PROJECT}
       EE_SERVICE_ACCOUNT: ${RISK_EE_SERVICE_ACCOUNT}
       EE_KEY_FILE: /service/ee_secrets/ee-key.json
