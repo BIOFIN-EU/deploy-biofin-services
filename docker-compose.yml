@@ -280,8 +280,9 @@ services:
     restart: unless-stopped
     ports:
       - "3000:3000"
+    # NEXT_PUBLIC_API_BASE_URL is baked into the image at build time (GitHub
+    # Actions variable on the frontend-ui repo); setting it here has no effect.
     environment:
-      - NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}
       - EXTRA_ALLOWED_HOSTS=${EXTRA_ALLOWED_HOSTS}
       - VIRTUAL_HOST=${VIRTUAL_HOST_FRONTEND}
       - LETSENCRYPT_HOST=${LETSENCRYPT_HOST_FRONTEND}
@@ -292,7 +293,7 @@ services:
       - https_proxy=${HTTPS_PROXY}
       - NO_PROXY=${DEFAULT_NO_PROXY}
       - no_proxy=${DEFAULT_NO_PROXY}
-    command: npm run dev -- --hostname 0.0.0.0 --port 3000
+    # The image runs the production server itself (node server.js).
     depends_on:
       gateway-api:
         condition: service_started
