@@ -61,6 +61,9 @@ GATEWAY_AUTH_CLIENT_SECRET=gateway-secret
 PHYSICAL_AUTH_CLIENT_ID=physical-client
 PHYSICAL_AUTH_CLIENT_SECRET=physical-secret
 
+# Gateway -> physical-api (openssl rand -hex 32)
+INTERNAL_API_SECRET=change-me
+
 # MinIO
 MINIO_ROOT_USER=minio
 MINIO_ROOT_PASSWORD=minio123
@@ -98,15 +101,18 @@ docker compose down -v
 
 ## Available Services
 
+Only the frontend and the gateway are published. The other services are
+reachable by the containers only, so nothing can call them without going
+through the gateway's login checks.
+
 | Service | URL |
 |---|---|
 | Frontend UI | http://localhost:3000 |
 | Gateway API | http://localhost:8000 |
-| Auth API | http://localhost:8010 |
-| Physical API | http://localhost:8020 |
-| Temporal UI | http://localhost:8080 |
-| MinIO API | http://localhost:9000 |
-| MinIO Console | http://localhost:9001 |
+| Temporal UI | http://localhost:8081, on the server only (`ssh -L 8081:localhost:8081 <server>`) |
+| MinIO Console | http://localhost:9001, on the server only (`ssh -L 9001:localhost:9001 <server>`) |
+
+Auth API, Physical API, Temporal and the MinIO API have no published port.
 
 ---
 
