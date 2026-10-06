@@ -28,7 +28,7 @@ services:
       - POSTGRES_PASSWORD=${AUTH_POSTGRES_PASSWORD}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - JWT_ALGORITHM=HS256
-      - ACCESS_TOKEN_EXPIRE_HOURS=24
+      - ACCESS_TOKEN_EXPIRE_MINUTES=30
       - AUTH_CLIENT_ID=${AUTH_CLIENT_ID}
       - AUTH_CLIENT_SECRET=${AUTH_CLIENT_SECRET}
       - GATEWAY_AUTH_CLIENT_ID=${GATEWAY_AUTH_CLIENT_ID}
@@ -37,8 +37,8 @@ services:
       - PHYSICAL_AUTH_CLIENT_SECRET=${PHYSICAL_AUTH_CLIENT_SECRET}
       - NO_PROXY=${DEFAULT_NO_PROXY}
       - no_proxy=${DEFAULT_NO_PROXY}
-    ports:
-      - "8010:8010"
+    # No published port: only reachable by the other containers (the gateway
+    # and physical-api).
     depends_on:
       auth-db:
         condition: service_healthy
@@ -78,8 +78,7 @@ services:
   temporal:
     image: temporalio/auto-setup:latest
     restart: unless-stopped
-    ports:
-      - "7233:7233"
+    # No published port: only physical-api and its worker talk to Temporal.
     environment:
       - DB=postgres12
       - DB_PORT=5432
@@ -94,8 +93,10 @@ services:
   temporal-ui:
     image: temporalio/ui:latest
     restart: unless-stopped
+    # No login of its own and shows workflow data: on the server itself only
+    # (from your machine: ssh -L 8081:localhost:8081 <server>).
     ports:
-      - "8081:8080"
+      - "127.0.0.1:8081:8080"
     environment:
       - TEMPORAL_ADDRESS=temporal:7233
       - TEMPORAL_TASK_QUEUE=case-workflow-task-queue
@@ -113,9 +114,10 @@ services:
       - MINIO_ENDPOINT=minio:9000
       - MINIO_BUCKET=case-documents
       - MINIO_SECURE=false
+    # The API (9000) isn't published: only physical-api uses it. The console
+    # is on the server itself only (ssh -L 9001:localhost:9001 <server>).
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "127.0.0.1:9001:9001"
     volumes:
       - minio_data:/data
     healthcheck:
@@ -129,9 +131,11 @@ services:
     image: ghcr.io/biofin-eu/physical-api:latest
     restart: unless-stopped
     command: uvicorn app.main:app --host 0.0.0.0 --port 8020
-    ports:
-      - "8020:8020"
+    # No published port: only the gateway may call it, and it trusts the user
+    # the gateway names. INTERNAL_API_SECRET proves a request comes from the
+    # gateway.
     environment:
+      - INTERNAL_API_SECRET=${INTERNAL_API_SECRET}
       - POSTGRES_HOST=physical-db
       - POSTGRES_PORT=5432
       - POSTGRES_DB=${PHYSICAL_POSTGRES_DB}
@@ -163,6 +167,7 @@ services:
     restart: unless-stopped
     command: python -m app.workers.temporal_worker
     environment:
+      - INTERNAL_API_SECRET=${INTERNAL_API_SECRET}
       - POSTGRES_HOST=physical-db
       - POSTGRES_PORT=5432
       - POSTGRES_DB=${PHYSICAL_POSTGRES_DB}
@@ -256,6 +261,7 @@ services:
       - RISK_API_URL=http://risk-framework:${RISK_WEB_PORT}
       - AUTH_CLIENT_ID=${GATEWAY_AUTH_CLIENT_ID}
       - AUTH_CLIENT_SECRET=${GATEWAY_AUTH_CLIENT_SECRET}
+      - INTERNAL_API_SECRET=${INTERNAL_API_SECRET}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - JWT_ALGORITHM=HS256
       - EXTRA_ALLOWED_HOSTS=${EXTRA_ALLOWED_HOSTS}
